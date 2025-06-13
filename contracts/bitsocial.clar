@@ -353,3 +353,424 @@
     (+ base-score (/ (get total-actions activity) u10))
   )
 )
+
+;; PUBLIC INTERFACE FUNCTIONS - External API Endpoints
+
+;; User Registration - Onboarding New Members
+(define-public (register-user 
+    (name (string-ascii 64))
+    (metadata (optional (string-utf8 512)))
+    (public-profile bool)
+  )
+  (let ((caller tx-sender))
+    (asserts! (not (user-exists caller)) ERR_ALREADY_EXISTS)
+    (asserts! (> (len name) u0) ERR_INVALID_INPUT)
+    (asserts! (<= (len name) MAX_NAME_LENGTH) ERR_INVALID_INPUT)
+    
+    (map-set Users caller {
+      name: name,
+      status: STATUS_ACTIVE,
+      timestamp: stacks-block-height,
+      metadata: metadata,
+      deactivation-time: none,
+      encryption-key: none,
+      profile-image: none,
+      reputation-score: u10, ;; Starting reputation
+      verification-status: false,
+    })
+    
+    (map-set UserPrivacy caller {
+      friend-list-visible: true,
+      status-visible: true,
+      metadata-visible: true,
+      last-seen-visible: false,
+      profile-image-visible: true,
+      encryption-enabled: false,
+      analytics-enabled: true,
+      public-profile: public-profile,
+      last-updated: stacks-block-height,
+    })
+    
+    (print {
+      event: "user-registered",
+      user: caller,
+      name: name,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Intelligent Batch Optimization - Dynamic Performance Tuning
+(define-public (optimize-batch-size)
+  (let (
+      (caller tx-sender)
+      (batch-data (default-to {
+        message-counter: u0,
+        last-batch-timestamp: stacks-block-height,
+        batch-size: MIN_BATCH_SIZE,
+        current-batch-items: u0,
+        total-batches: u0,
+        optimization-score: u50,
+        processing-efficiency: u50,
+      }
+        (map-get? UserBatches caller)
+      ))
+      (current-time stacks-block-height)
+      (time-since-last-batch (- current-time (get last-batch-timestamp batch-data)))
+      (current-batch-size (get batch-size batch-data))
+      (items-in-current-batch (get current-batch-items batch-data))
+      (efficiency (get processing-efficiency batch-data))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    
+    (if (> time-since-last-batch BATCH_EXPIRY_PERIOD)
+      ;; Reduce batch size due to inactivity
+      (begin
+        (map-set UserBatches caller
+          (merge batch-data {
+            batch-size: (max-uint MIN_BATCH_SIZE (/ current-batch-size u2)),
+            current-batch-items: u0,
+            last-batch-timestamp: current-time,
+            optimization-score: (max-uint u10 (- (get optimization-score batch-data) u5)),
+          })
+        )
+        (ok "batch-size-reduced")
+      )
+      ;; Optimize based on current usage
+      (begin
+        (let ((new-size (if (>= items-in-current-batch OPTIMAL_BATCH_THRESHOLD)
+                          (min-uint MAX_BATCH_SIZE (* current-batch-size u2))
+                          current-batch-size)))
+          (map-set UserBatches caller
+            (merge batch-data { 
+              batch-size: new-size,
+              optimization-score: (+ (get optimization-score batch-data) u1),
+              processing-efficiency: (+ efficiency u1),
+            })
+          )
+          (ok "batch-optimized")
+        )
+      )
+    )
+  )
+)
+
+;; Advanced Privacy Configuration - Granular Control Center
+(define-public (update-advanced-privacy-settings
+    (friend-list-visible bool)
+    (status-visible bool)
+    (metadata-visible bool)
+    (last-seen-visible bool)
+    (profile-image-visible bool)
+    (encryption-enabled bool)
+    (analytics-enabled bool)
+    (public-profile bool)
+  )
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-rate-limit caller u2) ERR_RATE_LIMITED)
+    
+    (map-set UserPrivacy caller {
+      friend-list-visible: friend-list-visible,
+      status-visible: status-visible,
+      metadata-visible: metadata-visible,
+      last-seen-visible: last-seen-visible,
+      profile-image-visible: profile-image-visible,
+      encryption-enabled: encryption-enabled,
+      analytics-enabled: analytics-enabled,
+      public-profile: public-profile,
+      last-updated: stacks-block-height,
+    })
+    
+    (update-rate-limit caller u2)
+    (update-user-activity caller)
+    
+    (print {
+      event: "privacy-settings-updated",
+      user: caller,
+      encryption-enabled: encryption-enabled,
+      public-profile: public-profile,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Enhanced Profile Management - Dynamic User Data Updates
+(define-public (update-user-profile
+    (name (optional (string-ascii 64)))
+    (metadata (optional (string-utf8 512)))
+    (encryption-key (optional (buff 32)))
+    (profile-image (optional (string-utf8 256)))
+  )
+  (let (
+      (caller tx-sender)
+      (user (unwrap! (map-get? Users caller) ERR_NOT_FOUND))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-rate-limit caller u2) ERR_RATE_LIMITED)
+    
+    ;; Validate name length if provided
+    (match name
+      new-name (asserts! (and (> (len new-name) u0) (<= (len new-name) MAX_NAME_LENGTH)) ERR_INVALID_INPUT)
+      true
+    )
+    
+    (map-set Users caller
+      (merge user {
+        name: (default-to (get name user) name),
+        metadata: (if (is-some metadata) metadata (get metadata user)),
+        encryption-key: (if (is-some encryption-key) encryption-key (get encryption-key user)),
+        profile-image: (if (is-some profile-image) profile-image (get profile-image user)),
+        reputation-score: (calculate-reputation caller),
+      })
+    )
+    
+    (update-rate-limit caller u2)
+    (update-user-activity caller)
+    
+    (print {
+      event: "profile-updated",
+      user: caller,
+      has-encryption: (is-some encryption-key),
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Manual Batch Configuration - Advanced User Control
+(define-public (set-batch-size (new-size uint))
+  (let (
+      (caller tx-sender)
+      (batch-data (default-to {
+        message-counter: u0,
+        last-batch-timestamp: stacks-block-height,
+        batch-size: MIN_BATCH_SIZE,
+        current-batch-items: u0,
+        total-batches: u0,
+        optimization-score: u50,
+        processing-efficiency: u50,
+      }
+        (map-get? UserBatches caller)
+      ))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (and (>= new-size MIN_BATCH_SIZE) (<= new-size MAX_BATCH_SIZE)) ERR_INVALID_INPUT)
+    
+    (map-set UserBatches caller (merge batch-data { batch-size: new-size }))
+    (update-user-activity caller)
+    
+    (print {
+      event: "batch-size-manually-set",
+      user: caller,
+      new-size: new-size,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Enhanced Session Management - Security & Analytics Tracking
+(define-public (record-login)
+  (let (
+      (caller tx-sender)
+      (activity (default-to {
+        last-seen: stacks-block-height,
+        login-count: u0,
+        total-actions: u0,
+        last-action: stacks-block-height,
+        streak-count: u0,
+        engagement-score: u0,
+      }
+        (map-get? UserActivity caller)
+      ))
+    )
+    (asserts! (user-exists caller) ERR_NOT_FOUND)
+    
+    (map-set UserActivity caller
+      (merge activity {
+        last-seen: stacks-block-height,
+        login-count: (+ (get login-count activity) u1),
+      })
+    )
+    
+    ;; Update reputation based on consistent logins
+    (let ((user-data (unwrap-panic (map-get? Users caller))))
+      (map-set Users caller
+        (merge user-data {
+          reputation-score: (+ (get reputation-score user-data) u1)
+        })
+      )
+    )
+    
+    (print {
+      event: "user-login",
+      user: caller,
+      login-count: (+ (get login-count activity) u1),
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Friend Request System - Social Connection Management
+(define-public (send-friend-request (target principal))
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-active-user target) ERR_NOT_FOUND)
+    (asserts! (not (is-eq caller target)) ERR_INVALID_INPUT)
+    (asserts! (not (is-blocked caller target)) ERR_BLOCKED)
+    (asserts! (check-rate-limit caller u1) ERR_RATE_LIMITED)
+    
+    ;; Check if friendship already exists
+    (asserts! (is-none (map-get? Friendships { user1: caller, user2: target })) ERR_ALREADY_EXISTS)
+    (asserts! (is-none (map-get? Friendships { user1: target, user2: caller })) ERR_ALREADY_EXISTS)
+    
+    (map-set Friendships { user1: caller, user2: target } {
+      status: FRIENDSHIP_PENDING,
+      created-at: stacks-block-height,
+      last-interaction: stacks-block-height,
+      interaction-count: u0,
+    })
+    
+    (update-rate-limit caller u1)
+    (update-user-activity caller)
+    
+    (print {
+      event: "friend-request-sent",
+      from: caller,
+      to: target,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Accept Friend Request - Social Connection Approval
+(define-public (accept-friend-request (requester principal))
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (not (is-blocked caller requester)) ERR_BLOCKED)
+    
+    (let ((friendship (unwrap! (map-get? Friendships { user1: requester, user2: caller }) ERR_NOT_FOUND)))
+      (asserts! (is-eq (get status friendship) FRIENDSHIP_PENDING) ERR_INVALID_INPUT)
+      
+      (map-set Friendships { user1: requester, user2: caller }
+        (merge friendship {
+          status: FRIENDSHIP_ACTIVE,
+          last-interaction: stacks-block-height,
+          interaction-count: u1,
+        })
+      )
+      
+      (update-user-activity caller)
+      
+      (print {
+        event: "friend-request-accepted",
+        requester: requester,
+        accepter: caller,
+        timestamp: stacks-block-height,
+      })
+      (ok true)
+    )
+  )
+)
+
+;; Block User System - Enhanced Safety Mechanism
+(define-public (block-user (target principal) (reason (optional (string-utf8 128))))
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (not (is-eq caller target)) ERR_INVALID_INPUT)
+    
+    (map-set BlockedUsers { blocker: caller, blocked: target } {
+      timestamp: stacks-block-height,
+      reason: reason,
+      report-count: u1,
+    })
+    
+    ;; Remove any existing friendship
+    (map-delete Friendships { user1: caller, user2: target })
+    (map-delete Friendships { user1: target, user2: caller })
+    
+    (update-user-activity caller)
+    
+    (print {
+      event: "user-blocked",
+      blocker: caller,
+      blocked: target,
+      has-reason: (is-some reason),
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; READ-ONLY FUNCTIONS - Data Queries & Analytics
+
+;; Get User Profile - Public Data Access
+(define-read-only (get-user-profile (user principal))
+  (let (
+      (user-data (map-get? Users user))
+      (privacy (get-privacy-settings user))
+    )
+    (match user-data
+      data (ok {
+        name: (get name data),
+        status: (get status data),
+        timestamp: (get timestamp data),
+        metadata: (if (get metadata-visible privacy) (get metadata data) none),
+        profile-image: (if (get profile-image-visible privacy) (get profile-image data) none),
+        reputation-score: (get reputation-score data),
+        verification-status: (get verification-status data),
+        is-public: (get public-profile privacy),
+      })
+      ERR_NOT_FOUND
+    )
+  )
+)
+
+;; Get User Activity Stats - Analytics Dashboard
+(define-read-only (get-user-activity (user principal))
+  (let ((privacy (get-privacy-settings user)))
+    (if (get analytics-enabled privacy)
+      (ok (map-get? UserActivity user))
+      ERR_UNAUTHORIZED
+    )
+  )
+)
+
+;; Check Friendship Status - Relationship Query
+(define-read-only (check-friendship-status (user1 principal) (user2 principal))
+  (match (map-get? Friendships { user1: user1, user2: user2 })
+    friendship (ok (get status friendship))
+    (match (map-get? Friendships { user1: user2, user2: user1 })
+      friendship (ok (get status friendship))
+      (ok u404) ;; No relationship exists
+    )
+  )
+)
+
+;; Get Platform Statistics - Global Analytics
+(define-read-only (get-platform-stats)
+  (ok {
+    version: "1.0.0",
+    network: "Stacks Mainnet",
+    features: (list "privacy-controls" "batch-optimization" "anti-spam" "reputation-system"),
+    contract-address: (as-contract tx-sender)
+  })
+)
+
+;; CONTRACT INITIALIZATION & METADATA
+
+;; Contract deployment initialization
+(begin
+  (print {
+    event: "bitsocial-deployed",
+    version: "1.0.0",
+    deployer: tx-sender,
+    timestamp: stacks-block-height,
+    features: (list "user-management" "privacy-controls" "social-graph" "batch-optimization" "reputation-system")
+  })
+)
