@@ -706,3 +706,71 @@
     (ok true)
   )
 )
+
+;; READ-ONLY FUNCTIONS - Data Queries & Analytics
+
+;; Get User Profile - Public Data Access
+(define-read-only (get-user-profile (user principal))
+  (let (
+      (user-data (map-get? Users user))
+      (privacy (get-privacy-settings user))
+    )
+    (match user-data
+      data (ok {
+        name: (get name data),
+        status: (get status data),
+        timestamp: (get timestamp data),
+        metadata: (if (get metadata-visible privacy) (get metadata data) none),
+        profile-image: (if (get profile-image-visible privacy) (get profile-image data) none),
+        reputation-score: (get reputation-score data),
+        verification-status: (get verification-status data),
+        is-public: (get public-profile privacy),
+      })
+      ERR_NOT_FOUND
+    )
+  )
+)
+
+;; Get User Activity Stats - Analytics Dashboard
+(define-read-only (get-user-activity (user principal))
+  (let ((privacy (get-privacy-settings user)))
+    (if (get analytics-enabled privacy)
+      (ok (map-get? UserActivity user))
+      ERR_UNAUTHORIZED
+    )
+  )
+)
+
+;; Check Friendship Status - Relationship Query
+(define-read-only (check-friendship-status (user1 principal) (user2 principal))
+  (match (map-get? Friendships { user1: user1, user2: user2 })
+    friendship (ok (get status friendship))
+    (match (map-get? Friendships { user1: user2, user2: user1 })
+      friendship (ok (get status friendship))
+      (ok u404) ;; No relationship exists
+    )
+  )
+)
+
+;; Get Platform Statistics - Global Analytics
+(define-read-only (get-platform-stats)
+  (ok {
+    version: "1.0.0",
+    network: "Stacks Mainnet",
+    features: (list "privacy-controls" "batch-optimization" "anti-spam" "reputation-system"),
+    contract-address: (as-contract tx-sender)
+  })
+)
+
+;; CONTRACT INITIALIZATION & METADATA
+
+;; Contract deployment initialization
+(begin
+  (print {
+    event: "bitsocial-deployed",
+    version: "1.0.0",
+    deployer: tx-sender,
+    timestamp: stacks-block-height,
+    features: (list "user-management" "privacy-controls" "social-graph" "batch-optimization" "reputation-system")
+  })
+)
