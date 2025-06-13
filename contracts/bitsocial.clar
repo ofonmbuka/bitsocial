@@ -168,3 +168,90 @@
     report-count: uint,
   }
 )
+
+;; Content Management System - Post and Message Tracking
+(define-map UserContent
+  {
+    author: principal,
+    content-id: uint,
+  }
+  {
+    content: (string-utf8 280),
+    timestamp: uint,
+    likes: uint,
+    shares: uint,
+    status: uint,
+    encrypted: bool,
+  }
+)
+
+;; Platform Configuration - Admin Controls
+(define-map PlatformConfig
+  (string-ascii 32)
+  {
+    value: uint,
+    last-updated: uint,
+    updated-by: principal,
+  }
+)
+
+;; PRIVATE UTILITY FUNCTIONS - Internal Logic Components
+
+;; Enhanced Rate Limit Validator - Automatic Reset & Advanced Validation
+(define-private (check-rate-limit
+    (user principal)
+    (action-type uint)
+  )
+  (let (
+      (rate-data (default-to {
+        daily-actions: u0,
+        friend-requests: u0,
+        status-updates: u0,
+        messages-sent: u0,
+        last-reset: stacks-block-height,
+        violation-count: u0,
+      }
+        (map-get? RateLimits user)
+      ))
+      (current-time stacks-block-height)
+      (should-reset (> (- current-time (get last-reset rate-data)) RATE_LIMIT_RESET_PERIOD))
+    )
+    (if should-reset
+      (begin
+        (map-set RateLimits user {
+          daily-actions: u1,
+          friend-requests: (if (is-eq action-type u1) u1 u0),
+          status-updates: (if (is-eq action-type u2) u1 u0),
+          messages-sent: (if (is-eq action-type u3) u1 u0),
+          last-reset: current-time,
+          violation-count: u0,
+        })
+        true
+      )
+      (and
+        (< (get daily-actions rate-data) MAX_ACTIONS_PER_DAY)
+        (< (get violation-count rate-data) u5) ;; Max 5 violations per day
+        (or (not (is-eq action-type u1)) (< (get friend-requests rate-data) MAX_FRIEND_REQUESTS_PER_DAY))
+        (or (not (is-eq action-type u2)) (< (get status-updates rate-data) MAX_STATUS_UPDATES_PER_DAY))
+        (or (not (is-eq action-type u3)) (< (get messages-sent rate-data) MAX_MESSAGES_PER_DAY))
+      )
+    )
+  )
+)
+
+;; Enhanced Rate Limit Counter - Action Tracking & Intelligent Increment
+(define-private (update-rate-limit
+    (user principal)
+    (action-type uint)
+  )
+  (let ((rate-data (unwrap-panic (map-get? RateLimits user))))
+    (map-set RateLimits user
+      (merge rate-data {
+        daily-actions: (+ (get daily-actions rate-data) u1),
+        friend-requests: (+ (get friend-requests rate-data) (if (is-eq action-type u1) u1 u0)),
+        status-updates: (+ (get status-updates rate-data) (if (is-eq action-type u2) u1 u0)),
+        messages-sent: (+ (get messages-sent rate-data) (if (is-eq action-type u3) u1 u0)),
+      })
+    )
+  )
+)
