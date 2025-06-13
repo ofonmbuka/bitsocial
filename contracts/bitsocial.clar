@@ -353,3 +353,105 @@
     (+ base-score (/ (get total-actions activity) u10))
   )
 )
+
+;; PUBLIC INTERFACE FUNCTIONS - External API Endpoints
+
+;; User Registration - Onboarding New Members
+(define-public (register-user 
+    (name (string-ascii 64))
+    (metadata (optional (string-utf8 512)))
+    (public-profile bool)
+  )
+  (let ((caller tx-sender))
+    (asserts! (not (user-exists caller)) ERR_ALREADY_EXISTS)
+    (asserts! (> (len name) u0) ERR_INVALID_INPUT)
+    (asserts! (<= (len name) MAX_NAME_LENGTH) ERR_INVALID_INPUT)
+    
+    (map-set Users caller {
+      name: name,
+      status: STATUS_ACTIVE,
+      timestamp: stacks-block-height,
+      metadata: metadata,
+      deactivation-time: none,
+      encryption-key: none,
+      profile-image: none,
+      reputation-score: u10, ;; Starting reputation
+      verification-status: false,
+    })
+    
+    (map-set UserPrivacy caller {
+      friend-list-visible: true,
+      status-visible: true,
+      metadata-visible: true,
+      last-seen-visible: false,
+      profile-image-visible: true,
+      encryption-enabled: false,
+      analytics-enabled: true,
+      public-profile: public-profile,
+      last-updated: stacks-block-height,
+    })
+    
+    (print {
+      event: "user-registered",
+      user: caller,
+      name: name,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Intelligent Batch Optimization - Dynamic Performance Tuning
+(define-public (optimize-batch-size)
+  (let (
+      (caller tx-sender)
+      (batch-data (default-to {
+        message-counter: u0,
+        last-batch-timestamp: stacks-block-height,
+        batch-size: MIN_BATCH_SIZE,
+        current-batch-items: u0,
+        total-batches: u0,
+        optimization-score: u50,
+        processing-efficiency: u50,
+      }
+        (map-get? UserBatches caller)
+      ))
+      (current-time stacks-block-height)
+      (time-since-last-batch (- current-time (get last-batch-timestamp batch-data)))
+      (current-batch-size (get batch-size batch-data))
+      (items-in-current-batch (get current-batch-items batch-data))
+      (efficiency (get processing-efficiency batch-data))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    
+    (if (> time-since-last-batch BATCH_EXPIRY_PERIOD)
+      ;; Reduce batch size due to inactivity
+      (begin
+        (map-set UserBatches caller
+          (merge batch-data {
+            batch-size: (max-uint MIN_BATCH_SIZE (/ current-batch-size u2)),
+            current-batch-items: u0,
+            last-batch-timestamp: current-time,
+            optimization-score: (max-uint u10 (- (get optimization-score batch-data) u5)),
+          })
+        )
+        (ok "batch-size-reduced")
+      )
+      ;; Optimize based on current usage
+      (begin
+        (let ((new-size (if (>= items-in-current-batch OPTIMAL_BATCH_THRESHOLD)
+                          (min-uint MAX_BATCH_SIZE (* current-batch-size u2))
+                          current-batch-size)))
+          (map-set UserBatches caller
+            (merge batch-data { 
+              batch-size: new-size,
+              optimization-score: (+ (get optimization-score batch-data) u1),
+              processing-efficiency: (+ efficiency u1),
+            })
+          )
+          (ok "batch-optimized")
+        )
+      )
+    )
+  )
+)
