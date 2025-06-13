@@ -85,3 +85,86 @@
     verification-status: bool,
   }
 )
+
+;; Enhanced Privacy Control Center - Granular Visibility Settings
+(define-map UserPrivacy
+  principal
+  {
+    friend-list-visible: bool,
+    status-visible: bool,
+    metadata-visible: bool,
+    last-seen-visible: bool,
+    profile-image-visible: bool,
+    encryption-enabled: bool,
+    analytics-enabled: bool,
+    public-profile: bool,
+    last-updated: uint,
+  }
+)
+
+;; Advanced Rate Limiting Engine - Anti-Spam Protection
+(define-map RateLimits
+  principal
+  {
+    daily-actions: uint,
+    friend-requests: uint,
+    status-updates: uint,
+    messages-sent: uint,
+    last-reset: uint,
+    violation-count: uint,
+  }
+)
+
+;; Intelligent Batch Processing Optimizer - Performance Enhancement
+(define-map UserBatches
+  principal
+  {
+    message-counter: uint,
+    last-batch-timestamp: uint,
+    batch-size: uint,
+    current-batch-items: uint,
+    total-batches: uint,
+    optimization-score: uint,
+    processing-efficiency: uint,
+  }
+)
+
+;; Comprehensive Activity Analytics - User Engagement Tracking
+(define-map UserActivity
+  principal
+  {
+    last-seen: uint,
+    login-count: uint,
+    total-actions: uint,
+    last-action: uint,
+    streak-count: uint,
+    engagement-score: uint,
+  }
+)
+
+;; Enhanced Social Graph Management - Friendship Relations
+(define-map Friendships
+  {
+    user1: principal,
+    user2: principal,
+  }
+  { 
+    status: uint,
+    created-at: uint,
+    last-interaction: uint,
+    interaction-count: uint,
+  }
+)
+
+;; Multi-layered Safety Infrastructure - User Blocking System
+(define-map BlockedUsers
+  {
+    blocker: principal,
+    blocked: principal,
+  }
+  { 
+    timestamp: uint,
+    reason: (optional (string-utf8 128)),
+    report-count: uint,
+  }
+)
