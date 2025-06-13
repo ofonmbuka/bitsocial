@@ -255,3 +255,101 @@
     )
   )
 )
+
+;; Advanced Activity Logger - Comprehensive User Action Tracking with Streaks
+(define-private (update-user-activity (user principal))
+  (let (
+      (current-time stacks-block-height)
+      (activity (default-to {
+        last-seen: current-time,
+        login-count: u0,
+        total-actions: u0,
+        last-action: current-time,
+        streak-count: u0,
+        engagement-score: u0,
+      }
+        (map-get? UserActivity user)
+      ))
+      (is-consecutive-day (< (- current-time (get last-action activity)) u86400))
+    )
+    (map-set UserActivity user
+      (merge activity {
+        last-seen: current-time,
+        total-actions: (+ (get total-actions activity) u1),
+        last-action: current-time,
+        streak-count: (if is-consecutive-day (+ (get streak-count activity) u1) u1),
+        engagement-score: (+ (get engagement-score activity) u1),
+      })
+    )
+  )
+)
+
+;; Mathematical Utilities - Optimization Helpers
+(define-private (max-uint (a uint) (b uint))
+  (if (>= a b) a b)
+)
+
+(define-private (min-uint (a uint) (b uint))
+  (if (<= a b) a b)
+)
+
+;; Enhanced Social Graph Validators - Relationship Verification with History
+(define-private (are-friends (user1 principal) (user2 principal))
+  (match (map-get? Friendships { user1: user1, user2: user2 })
+    friendship (is-eq (get status friendship) FRIENDSHIP_ACTIVE)
+    (match (map-get? Friendships { user1: user2, user2: user1 })
+      friendship (is-eq (get status friendship) FRIENDSHIP_ACTIVE)
+      false
+    )
+  )
+)
+
+;; Enhanced User Status Validators - Security & Access Control
+(define-private (check-active-user (user principal))
+  (match (map-get? Users user)
+    user-data (and
+      (or (is-eq (get status user-data) STATUS_ACTIVE) (is-eq (get status user-data) STATUS_PREMIUM))
+      (is-none (get deactivation-time user-data))
+    )
+    false
+  )
+)
+
+(define-private (user-exists (user principal))
+  (is-some (map-get? Users user))
+)
+
+;; Enhanced Safety Validators - Blocking & Protection with Reporting
+(define-private (is-blocked (blocker principal) (blocked principal))
+  (or
+    (is-some (map-get? BlockedUsers { blocker: blocker, blocked: blocked }))
+    (is-some (map-get? BlockedUsers { blocker: blocked, blocked: blocker }))
+  )
+)
+
+;; Enhanced Privacy Settings Accessor - Secure Default Configuration
+(define-private (get-privacy-settings (user principal))
+  (default-to {
+    friend-list-visible: true,
+    status-visible: true,
+    metadata-visible: true,
+    last-seen-visible: false, ;; Default to private for better security
+    profile-image-visible: true,
+    encryption-enabled: false,
+    analytics-enabled: true,
+    public-profile: false,
+    last-updated: stacks-block-height,
+  }
+    (map-get? UserPrivacy user)
+  )
+)
+
+;; Reputation Calculator - Dynamic Trust Scoring
+(define-private (calculate-reputation (user principal))
+  (let (
+      (activity (default-to { engagement-score: u0, streak-count: u0, total-actions: u0, login-count: u0, last-seen: u0, last-action: u0 } (map-get? UserActivity user)))
+      (base-score (+ (get engagement-score activity) (* (get streak-count activity) u2)))
+    )
+    (+ base-score (/ (get total-actions activity) u10))
+  )
+)
