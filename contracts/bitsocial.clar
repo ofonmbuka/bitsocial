@@ -614,3 +614,95 @@
     (ok true)
   )
 )
+
+;; Friend Request System - Social Connection Management
+(define-public (send-friend-request (target principal))
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-active-user target) ERR_NOT_FOUND)
+    (asserts! (not (is-eq caller target)) ERR_INVALID_INPUT)
+    (asserts! (not (is-blocked caller target)) ERR_BLOCKED)
+    (asserts! (check-rate-limit caller u1) ERR_RATE_LIMITED)
+    
+    ;; Check if friendship already exists
+    (asserts! (is-none (map-get? Friendships { user1: caller, user2: target })) ERR_ALREADY_EXISTS)
+    (asserts! (is-none (map-get? Friendships { user1: target, user2: caller })) ERR_ALREADY_EXISTS)
+    
+    (map-set Friendships { user1: caller, user2: target } {
+      status: FRIENDSHIP_PENDING,
+      created-at: stacks-block-height,
+      last-interaction: stacks-block-height,
+      interaction-count: u0,
+    })
+    
+    (update-rate-limit caller u1)
+    (update-user-activity caller)
+    
+    (print {
+      event: "friend-request-sent",
+      from: caller,
+      to: target,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Accept Friend Request - Social Connection Approval
+(define-public (accept-friend-request (requester principal))
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (not (is-blocked caller requester)) ERR_BLOCKED)
+    
+    (let ((friendship (unwrap! (map-get? Friendships { user1: requester, user2: caller }) ERR_NOT_FOUND)))
+      (asserts! (is-eq (get status friendship) FRIENDSHIP_PENDING) ERR_INVALID_INPUT)
+      
+      (map-set Friendships { user1: requester, user2: caller }
+        (merge friendship {
+          status: FRIENDSHIP_ACTIVE,
+          last-interaction: stacks-block-height,
+          interaction-count: u1,
+        })
+      )
+      
+      (update-user-activity caller)
+      
+      (print {
+        event: "friend-request-accepted",
+        requester: requester,
+        accepter: caller,
+        timestamp: stacks-block-height,
+      })
+      (ok true)
+    )
+  )
+)
+
+;; Block User System - Enhanced Safety Mechanism
+(define-public (block-user (target principal) (reason (optional (string-utf8 128))))
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (not (is-eq caller target)) ERR_INVALID_INPUT)
+    
+    (map-set BlockedUsers { blocker: caller, blocked: target } {
+      timestamp: stacks-block-height,
+      reason: reason,
+      report-count: u1,
+    })
+    
+    ;; Remove any existing friendship
+    (map-delete Friendships { user1: caller, user2: target })
+    (map-delete Friendships { user1: target, user2: caller })
+    
+    (update-user-activity caller)
+    
+    (print {
+      event: "user-blocked",
+      blocker: caller,
+      blocked: target,
+      has-reason: (is-some reason),
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
