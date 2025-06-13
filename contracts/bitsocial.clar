@@ -539,3 +539,78 @@
     (ok true)
   )
 )
+
+;; Manual Batch Configuration - Advanced User Control
+(define-public (set-batch-size (new-size uint))
+  (let (
+      (caller tx-sender)
+      (batch-data (default-to {
+        message-counter: u0,
+        last-batch-timestamp: stacks-block-height,
+        batch-size: MIN_BATCH_SIZE,
+        current-batch-items: u0,
+        total-batches: u0,
+        optimization-score: u50,
+        processing-efficiency: u50,
+      }
+        (map-get? UserBatches caller)
+      ))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (and (>= new-size MIN_BATCH_SIZE) (<= new-size MAX_BATCH_SIZE)) ERR_INVALID_INPUT)
+    
+    (map-set UserBatches caller (merge batch-data { batch-size: new-size }))
+    (update-user-activity caller)
+    
+    (print {
+      event: "batch-size-manually-set",
+      user: caller,
+      new-size: new-size,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Enhanced Session Management - Security & Analytics Tracking
+(define-public (record-login)
+  (let (
+      (caller tx-sender)
+      (activity (default-to {
+        last-seen: stacks-block-height,
+        login-count: u0,
+        total-actions: u0,
+        last-action: stacks-block-height,
+        streak-count: u0,
+        engagement-score: u0,
+      }
+        (map-get? UserActivity caller)
+      ))
+    )
+    (asserts! (user-exists caller) ERR_NOT_FOUND)
+    
+    (map-set UserActivity caller
+      (merge activity {
+        last-seen: stacks-block-height,
+        login-count: (+ (get login-count activity) u1),
+      })
+    )
+    
+    ;; Update reputation based on consistent logins
+    (let ((user-data (unwrap-panic (map-get? Users caller))))
+      (map-set Users caller
+        (merge user-data {
+          reputation-score: (+ (get reputation-score user-data) u1)
+        })
+      )
+    )
+    
+    (print {
+      event: "user-login",
+      user: caller,
+      login-count: (+ (get login-count activity) u1),
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
